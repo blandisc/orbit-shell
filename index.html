@@ -5,6 +5,12 @@
     <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit Shell</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.ts" defer></script>
   </head>
@@ -18,12 +24,12 @@
           <span class="status-collection" id="collection-label">Steam</span>
         </div>
         <div class="status-center">
-          <span class="status-source-label">Collection</span>
+          <span class="status-source-label">Biblioteca</span>
           <span class="status-source" id="source-name">Steam</span>
         </div>
         <div class="status-right">
-          <button type="button" class="chip-btn" id="btn-theme" title="Theme" data-focus="theme">Theme</button>
-          <button type="button" class="chip-btn" id="btn-settings" title="Settings" data-focus="settings">Settings</button>
+          <button type="button" class="chip-btn" id="btn-theme" title="Tema" data-focus="theme">Tema</button>
+          <button type="button" class="chip-btn" id="btn-settings" title="Ajustes" data-focus="settings">Ajustes</button>
           <span class="status-time" id="clock">--:--</span>
           <span class="status-battery" id="battery" title="Battery placeholder">100%</span>
         </div>
@@ -31,14 +37,14 @@
 
       <div class="offline-banner hidden" id="offline-banner" role="status">
         <span class="offline-dot" aria-hidden="true"></span>
-        <span>Offline — Steam features limited.</span>
-        <button type="button" class="text-btn" id="btn-retry-online">Retry</button>
-        <button type="button" class="text-btn" id="btn-use-cache">Use cache</button>
+        <span>Sin conexión — las portadas de Steam CDN pueden fallar; se usa la caché local si existe.</span>
+        <button type="button" class="text-btn" id="btn-retry-online">Reintentar</button>
+        <button type="button" class="text-btn" id="btn-use-cache">Usar caché</button>
       </div>
 
       <div class="path-banner hidden" id="path-banner" role="status">
-        <span id="path-banner-text">Some shortcuts need paths.</span>
-        <button type="button" class="text-btn" id="btn-fix-paths">Fix in Settings</button>
+        <span id="path-banner-text">Algunos atajos necesitan una ruta.</span>
+        <button type="button" class="text-btn" id="btn-fix-paths">Abrir Ajustes</button>
       </div>
 
       <main class="stage" id="stage">
@@ -46,6 +52,14 @@
           <div class="carousel" id="carousel" tabindex="0"></div>
           <div class="carousel-dots" id="carousel-dots" aria-hidden="true"></div>
           <p class="focus-title" id="focus-title"></p>
+        </section>
+
+        <section class="empty-state hidden" id="loading-state" aria-label="Loading library">
+          <div class="empty-card">
+            <div class="spinner" aria-hidden="true"></div>
+            <h2 id="loading-title">Loading library</h2>
+            <p id="loading-body">Looking for Steam on this PC and reading installed games…</p>
+          </div>
         </section>
 
         <section class="empty-state hidden" id="empty-state" aria-label="Empty library">
@@ -56,6 +70,9 @@
             <div class="empty-actions">
               <button type="button" class="primary-btn" id="btn-open-steam-empty" data-focus="empty-steam">
                 Open Steam
+              </button>
+              <button type="button" class="text-btn hidden" id="btn-retry-steam">
+                Retry
               </button>
               <button type="button" class="text-btn hidden" id="btn-relocate-steam">
                 Relocate Steam
@@ -72,7 +89,7 @@
         </button>
         <button type="button" class="dock-item" data-dock="emulators" data-focus="dock-emulators">
           <span class="dock-icon" data-icon="emulators"></span>
-          <span class="dock-label">Emulators</span>
+          <span class="dock-label">Emuladores</span>
           <span class="dock-badge hidden" data-offline-for="emulators">Offline</span>
         </button>
         <button type="button" class="dock-item" data-dock="stremio" data-focus="dock-stremio">
@@ -116,10 +133,10 @@
     <!-- Confirm exit to Windows -->
     <div class="overlay hidden" id="confirm-exit" role="dialog" aria-modal="true" aria-labelledby="confirm-exit-title">
       <div class="overlay-card confirm-card">
-        <h2 id="confirm-exit-title">Salir a Windows?</h2>
-        <p>This leaves Orbit Shell and returns to the Windows desktop. You can reopen Orbit anytime.</p>
+        <h2 id="confirm-exit-title">¿Salir a Windows?</h2>
+        <p>Esto cierra Orbit Shell y vuelve al escritorio de Windows. Puedes abrir Orbit de nuevo cuando quieras.</p>
         <div class="overlay-actions">
-          <button type="button" class="text-btn" id="confirm-exit-cancel">Cancel</button>
+          <button type="button" class="text-btn" id="confirm-exit-cancel">Cancelar</button>
           <button type="button" class="primary-btn" id="confirm-exit-ok">Salir a Windows</button>
         </div>
       </div>
@@ -128,11 +145,11 @@
     <!-- Path / offline CTA dialog -->
     <div class="overlay hidden" id="path-cta" role="dialog" aria-modal="true" aria-labelledby="path-cta-title">
       <div class="overlay-card confirm-card">
-        <h2 id="path-cta-title">Shortcut unavailable</h2>
-        <p id="path-cta-body">This path is missing or empty.</p>
+        <h2 id="path-cta-title">Atajo no disponible</h2>
+        <p id="path-cta-body">Esta ruta falta o está vacía.</p>
         <div class="overlay-actions">
-          <button type="button" class="text-btn" id="path-cta-close">Close</button>
-          <button type="button" class="primary-btn" id="path-cta-settings">Open Settings</button>
+          <button type="button" class="text-btn" id="path-cta-close">Cerrar</button>
+          <button type="button" class="primary-btn" id="path-cta-settings">Abrir Ajustes</button>
         </div>
       </div>
     </div>
@@ -140,10 +157,10 @@
     <!-- Settings -->
     <div class="overlay hidden" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div class="overlay-card settings-card">
-        <h2 id="settings-title">Settings</h2>
+        <h2 id="settings-title">Ajustes</h2>
         <div class="settings-grid">
           <label class="field">
-            <span>Theme</span>
+            <span>Tema</span>
             <select id="settings-theme">
               <option value="b2">B2 Green CRT</option>
               <option value="a-prime">A-Prime Ultra</option>
@@ -151,48 +168,55 @@
             </select>
           </label>
           <label class="field">
-            <span>Steam dock opens</span>
+            <span>El icono Steam abre</span>
             <select id="settings-steam-mode">
-              <option value="bigpicture">Big Picture (default)</option>
-              <option value="desktop">Desktop Steam</option>
+              <option value="bigpicture">Big Picture (recomendado)</option>
+              <option value="desktop">Steam de escritorio</option>
             </select>
           </label>
           <label class="field check">
-            <input type="checkbox" id="settings-empty" />
-            <span>Show empty library (demo)</span>
-          </label>
-          <label class="field check">
-            <input type="checkbox" id="settings-offline" />
-            <span>Simulate offline</span>
-          </label>
-          <label class="field check">
-            <input type="checkbox" id="settings-steam-missing" />
-            <span>Simulate Steam missing</span>
-          </label>
-          <label class="field check">
             <input type="checkbox" id="settings-sd" checked />
-            <span>Show SD / ROMs dock item</span>
+            <span>Mostrar carpeta SD / ROMs en el dock</span>
           </label>
           <label class="field">
             <span>Grok URL</span>
             <input type="url" id="settings-grok" placeholder="https://grok.com" />
           </label>
           <label class="field">
-            <span>ES-DE / Emulators path</span>
-            <input type="text" id="settings-esde" placeholder="C:\ES-DE\ES-DE.exe" />
+            <span>Ruta ES-DE / emuladores</span>
+            <input type="text" id="settings-esde" placeholder="C:\Program Files\ES-DE\ES-DE.exe" />
           </label>
           <label class="field">
-            <span>Stremio path</span>
-            <input type="text" id="settings-stremio" placeholder="stremio://" />
+            <span>Ruta o URL de Stremio</span>
+            <input type="text" id="settings-stremio" placeholder="stremio://  o  %LOCALAPPDATA%\Programs\LNV\Stremio-4\Stremio.exe" />
           </label>
           <label class="field">
-            <span>SD / ROMs folder</span>
+            <span>Carpeta SD / ROMs</span>
             <input type="text" id="settings-sd-path" placeholder="D:\ROMs" />
           </label>
           <label class="field">
-            <span>Steam install path (optional)</span>
+            <span>Ruta de Steam (opcional; se detecta sola)</span>
             <input type="text" id="settings-steam-path" placeholder="C:\Program Files (x86)\Steam" />
           </label>
+          <div class="settings-rescan-row">
+            <button type="button" class="text-btn" id="btn-rescan-steam">Buscar Steam de nuevo</button>
+            <span class="settings-steam-status" id="settings-steam-status"></span>
+          </div>
+          <details class="debug-fold">
+            <summary>Avanzado / depuración</summary>
+            <label class="field check">
+              <input type="checkbox" id="settings-empty" />
+              <span>Show empty library (demo)</span>
+            </label>
+            <label class="field check">
+              <input type="checkbox" id="settings-offline" />
+              <span>Simulate offline</span>
+            </label>
+            <label class="field check">
+              <input type="checkbox" id="settings-steam-missing" />
+              <span>Simulate Steam missing</span>
+            </label>
+          </details>
         </div>
         <p class="settings-status" id="settings-import-status" role="status"></p>
         <div class="overlay-actions">
@@ -200,16 +224,16 @@
           <button type="button" class="text-btn" id="btn-import">Import JSON</button>
           <button type="button" class="text-btn" id="btn-replay-tutorial">Show tutorial</button>
           <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
-          <button type="button" class="primary-btn" id="settings-close">Close</button>
+          <button type="button" class="primary-btn" id="settings-close">Cerrar</button>
         </div>
-        <p class="settings-hint">Config is shareable. Bad imports roll back automatically.</p>
+        <p class="settings-hint">La config se comparte en un JSON. Un import inválido se revierte solo.</p>
       </div>
     </div>
 
     <!-- Theme picker quick overlay -->
     <div class="overlay hidden" id="theme-picker" role="dialog" aria-modal="true" aria-labelledby="theme-picker-title">
       <div class="overlay-card theme-card">
-        <h2 id="theme-picker-title">Themes</h2>
+        <h2 id="theme-picker-title">Temas</h2>
         <div class="theme-options">
           <button type="button" class="theme-option" data-theme-pick="b2">
             <img src="/assets/themes/b2-green.png" alt="" />
@@ -225,7 +249,7 @@
           </button>
         </div>
         <div class="overlay-actions">
-          <button type="button" class="primary-btn" id="theme-picker-close">Close</button>
+          <button type="button" class="primary-btn" id="theme-picker-close">Cerrar</button>
         </div>
       </div>
     </div>
@@ -234,10 +258,10 @@
     <div class="overlay hidden" id="launching" role="status" aria-live="assertive">
       <div class="overlay-card launching-card">
         <div class="spinner" aria-hidden="true"></div>
-        <h2 id="launching-title">Launching…</h2>
-        <p id="launching-sub">Please wait</p>
+        <h2 id="launching-title">Abriendo…</h2>
+        <p id="launching-sub">Un momento</p>
         <div class="overlay-actions" style="justify-content: center">
-          <button type="button" class="text-btn" id="launching-cancel">Cancel</button>
+          <button type="button" class="text-btn" id="launching-cancel">Cancelar</button>
         </div>
       </div>
     </div>

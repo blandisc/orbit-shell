@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://shared.akamai.steamstatic.com https://cdn.cloudflare.steamstatic.com https://shared.steamstatic.com data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' ipc: http://ipc.localhost",
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://asset.localhost https://shared.akamai.steamstatic.com https://shared.cloudflare.steamstatic.com https://shared.fastly.steamstatic.com https://cdn.cloudflare.steamstatic.com https://cdn.akamai.steamstatic.com https://shared.steamstatic.com https://steamcdn-a.akamaihd.net https://cdn.steampowered.com data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
@@ -46,7 +46,7 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "perUser"
+        "installMode": "currentUser"
       }
     }
   }

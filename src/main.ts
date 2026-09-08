@@ -1,4 +1,6 @@
-/** Orbit Shell — console home with usability backlog U-01…U-08. */
+/** Orbit Shell — console home with a real Steam library and handheld-sized chrome. */
+
+import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 
 type ThemeId = "b2" | "a-prime" | "c-nordic";
 type InputModality = "mouse-keyboard" | "gamepad";
@@ -12,13 +14,15 @@ type OverlayKind =
   | "launching"
   | "confirm-exit"
   | "path-cta";
+type LibraryStatus = "idle" | "loading" | "ready" | "missing" | "error";
 
 interface Game {
   id: string;
   name: string;
   genre: string;
-  poster: string;
+  posters: string[];
   color: string;
+  isShortcut: boolean;
 }
 
 interface OrbitConfig {
@@ -34,6 +38,22 @@ interface OrbitConfig {
   stremioPath: string;
   sdPath: string;
   steamPath: string;
+}
+
+interface SteamGameDto {
+  id: string;
+  name: string;
+  installed: boolean;
+  isShortcut: boolean;
+  lastPlayed: number;
+  localPosters: string[];
+}
+
+interface SteamScan {
+  found: boolean;
+  steamPath: string | null;
+  games: SteamGameDto[];
+  message: string | null;
 }
 
 const STORAGE_CONFIG = "orbit-shell-config";
@@ -52,84 +72,11 @@ const DEFAULT_CONFIG: OrbitConfig = {
   steamMissing: false,
   steamMode: "bigpicture",
   grokUrl: "https://grok.com",
-  esdePath: "C:\\ES-DE\\ES-DE.exe",
+  esdePath: "C:\\Program Files\\ES-DE\\ES-DE.exe",
   stremioPath: "stremio://",
   sdPath: "D:\\ROMs",
   steamPath: "C:\\Program Files (x86)\\Steam",
 };
-
-const MOCK_GAMES: Game[] = [
-  {
-    id: "1001",
-    name: "Little Haven",
-    genre: "Cozy Indie",
-    poster: "/assets/posters/little-haven.jpg",
-    color: "#3a6b8c",
-  },
-  {
-    id: "1002",
-    name: "Northern Run",
-    genre: "Racing",
-    poster: "/assets/posters/northern-run.jpg",
-    color: "#1a3a5c",
-  },
-  {
-    id: "1003",
-    name: "Neon District",
-    genre: "Action",
-    poster: "/assets/posters/neon-district.jpg",
-    color: "#5a1a6c",
-  },
-  {
-    id: "1004",
-    name: "Highridge",
-    genre: "Adventure",
-    poster: "/assets/posters/highridge.jpg",
-    color: "#4a6a4c",
-  },
-  {
-    id: "1005",
-    name: "Kaleido",
-    genre: "Puzzle",
-    poster: "/assets/posters/kaleido.jpg",
-    color: "#8a3a6c",
-  },
-  {
-    id: "1006",
-    name: "Orbital Yard",
-    genre: "Sci-Fi",
-    poster: "/assets/posters/orbital-yard.jpg",
-    color: "#2a3a7c",
-  },
-  {
-    id: "1007",
-    name: "Starfarer",
-    genre: "Exploration",
-    poster: "/assets/posters/starfarer.jpg",
-    color: "#1a2a4c",
-  },
-  {
-    id: "1008",
-    name: "Tidebound",
-    genre: "Narrative",
-    poster: "/assets/posters/tidebound.jpg",
-    color: "#1a5a6c",
-  },
-  {
-    id: "1009",
-    name: "Dune Path",
-    genre: "RPG",
-    poster: "/assets/posters/dune-path.jpg",
-    color: "#8a6a2c",
-  },
-  {
-    id: "1010",
-    name: "Cliffhaven",
-    genre: "Adventure",
-    poster: "/assets/posters/cliffhaven.jpg",
-    color: "#3a5a3c",
-  },
-];
 
 /* ——— Config schema (U-01) ——— */
 
@@ -156,7 +103,6 @@ function parseOrbitConfig(raw: unknown): OrbitConfig | null {
     return null;
   }
 
-  // Reject arrays / wrong types on known keys
   const stringKeys = [
     "grokUrl",
     "esdePath",
@@ -224,6 +170,11 @@ const state = {
   launchLocked: false,
   launchTimer: 0 as number,
   pathCtaTarget: "" as string,
+  libraryStatus: "idle" as LibraryStatus,
+  libraryFound: false,
+  libraryGames: [] as Game[],
+  libraryMessage: "" as string,
+  pathExists: {} as Record<string, boolean>,
 };
 
 function $(id: string): HTMLElement {
@@ -234,11 +185,15 @@ function $(id: string): HTMLElement {
 
 function games(): Game[] {
   if (state.config.steamMissing || state.config.emptyLibrary) return [];
-  return MOCK_GAMES;
+  return state.libraryGames;
 }
 
 function pathLooksMissing(path: string): boolean {
-  return !path || !path.trim();
+  if (!path || !path.trim()) return true;
+  if (path.includes("://")) return false;
+  if (path in state.pathExists) return !state.pathExists[path];
+  // Until probed, treat a filled-in path as present so we don't flash false alarms.
+  return false;
 }
 
 function dockItems(): HTMLButtonElement[] {
@@ -248,6 +203,207 @@ function dockItems(): HTMLButtonElement[] {
   return all.filter((b) => !b.classList.contains("hidden"));
 }
 
+function inTauri(): boolean {
+  try {
+    return isTauri();
+  } catch {
+    return false;
+  }
+}
+
+/* ——— Steam art ——— */
+
+function colorForId(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 33 + id.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 34% 26%)`;
+}
+
+function letterPoster(name: string, color: string): string {
+  const letter = (name.trim().charAt(0) || "?").toUpperCase();
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900">` +
+    `<rect width="100%" height="100%" fill="${color}"/>` +
+    `<text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" ` +
+    `fill="rgba(255,255,255,0.88)" font-family="Inter,Segoe UI,sans-serif" ` +
+    `font-size="280" font-weight="700">${letter}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function toAssetUrl(fsPath: string): string {
+  if (!fsPath) return "";
+  if (fsPath.startsWith("http") || fsPath.startsWith("data:")) return fsPath;
+  if (!inTauri()) return "";
+  try {
+    return convertFileSrc(fsPath);
+  } catch {
+    return "";
+  }
+}
+
+function steamCdnPosters(appid: string): string[] {
+  const files = [
+    "library_600x900.jpg",
+    "library_600x900_2x.jpg",
+    "library_hero.jpg",
+    "header.jpg",
+    "capsule_616x353.jpg",
+  ];
+  const hosts = [
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/`,
+    `https://steamcdn-a.akamaihd.net/steam/apps/${appid}/`,
+  ];
+  const out: string[] = [];
+  for (const file of files) {
+    for (const host of hosts) out.push(host + file);
+  }
+  return out;
+}
+
+function dtoToGame(dto: SteamGameDto): Game {
+  const local = dto.localPosters.map(toAssetUrl).filter(Boolean);
+  const posters = dto.isShortcut
+    ? [...local, letterPoster(dto.name, colorForId(dto.id))]
+    : [...local, ...steamCdnPosters(dto.id), letterPoster(dto.name, colorForId(dto.id))];
+  return {
+    id: dto.id,
+    name: dto.name,
+    genre: dto.isShortcut ? "Non-Steam" : "Steam",
+    posters,
+    color: colorForId(dto.id),
+    isShortcut: dto.isShortcut,
+  };
+}
+
+function bindPosterFallbacks(img: HTMLImageElement, urls: string[]): void {
+  let i = 0;
+  const next = (): void => {
+    while (i < urls.length && !urls[i]) i += 1;
+    if (i >= urls.length) {
+      img.style.display = "none";
+      return;
+    }
+    img.src = urls[i];
+  };
+  img.addEventListener("error", () => {
+    i += 1;
+    next();
+  });
+  next();
+}
+
+async function refreshLibrary(): Promise<void> {
+  const statusEl = document.getElementById("settings-steam-status");
+  if (state.config.steamMissing) {
+    state.libraryStatus = "missing";
+    state.libraryFound = false;
+    state.libraryGames = [];
+    state.libraryMessage = "Steam not found (debug).";
+    if (statusEl) statusEl.textContent = state.libraryMessage;
+    renderCarousel();
+    syncFocusClass();
+    updateLibraryChrome();
+    return;
+  }
+
+  state.libraryStatus = "loading";
+  renderCarousel();
+
+  if (!inTauri()) {
+    state.libraryStatus = "missing";
+    state.libraryFound = false;
+    state.libraryGames = [];
+    state.libraryMessage =
+      "Steam se lee en la app de Windows. Esta vista previa del navegador no puede ver tu biblioteca.";
+    if (statusEl) statusEl.textContent = state.libraryMessage;
+    renderCarousel();
+    syncFocusClass();
+    updateLibraryChrome();
+    return;
+  }
+
+  try {
+    const scan = await invoke<SteamScan>("scan_steam_library", {
+      preferredPath: state.config.steamPath || null,
+    });
+    state.libraryFound = scan.found;
+    state.libraryGames = (scan.games ?? []).map(dtoToGame);
+    state.libraryMessage = scan.message ?? "";
+    state.libraryStatus = scan.found ? "ready" : "missing";
+    if (scan.found && scan.steamPath && scan.steamPath !== state.config.steamPath) {
+      state.config.steamPath = scan.steamPath;
+      saveConfig();
+      const input = document.getElementById("settings-steam-path") as HTMLInputElement | null;
+      if (input) input.value = scan.steamPath;
+    }
+    if (statusEl) {
+      statusEl.textContent = scan.found
+        ? `${scan.games.length} juegos · ${scan.steamPath ?? ""}`
+        : scan.message ?? "Steam not found";
+    }
+  } catch (err) {
+    state.libraryStatus = "error";
+    state.libraryFound = false;
+    state.libraryGames = [];
+    state.libraryMessage = String(err);
+    if (statusEl) statusEl.textContent = `Error: ${state.libraryMessage}`;
+  }
+
+  renderCarousel();
+  syncFocusClass();
+  updateLibraryChrome();
+}
+
+async function refreshPathHealth(): Promise<void> {
+  const paths = [
+    state.config.esdePath,
+    state.config.sdPath,
+    state.config.stremioPath,
+    state.config.steamPath,
+  ];
+  if (inTauri()) {
+    await Promise.all(
+      paths.map(async (p) => {
+        if (!p || p.includes("://")) {
+          state.pathExists[p] = Boolean(p);
+          return;
+        }
+        try {
+          state.pathExists[p] = await invoke<boolean>("probe_path", { path: p });
+        } catch {
+          state.pathExists[p] = false;
+        }
+      }),
+    );
+  }
+  updatePathHealth();
+}
+
+function updateLibraryChrome(): void {
+  const n = games().length;
+  const source = $("source-name");
+  const collection = $("collection-label");
+  if (state.libraryStatus === "loading") {
+    source.textContent = "Steam…";
+    collection.textContent = "Buscando";
+    return;
+  }
+  if (state.config.steamMissing || state.libraryStatus === "missing") {
+    source.textContent = "Steam";
+    collection.textContent = "No encontrado";
+    return;
+  }
+  if (n === 0) {
+    source.textContent = "Steam";
+    collection.textContent = "Vacía";
+    return;
+  }
+  source.textContent = "Steam";
+  collection.textContent = `${n} juegos`;
+}
+
 /* ——— InputGlyphProvider (U-03) ——— */
 
 const GlyphProvider = {
@@ -255,10 +411,7 @@ const GlyphProvider = {
     return state.modality;
   },
   set(m: InputModality): void {
-    if (state.modality === m) {
-      // still refresh tutorial/hints if needed
-      return;
-    }
+    if (state.modality === m) return;
     state.modality = m;
     document.documentElement.setAttribute("data-input", m);
     renderHints();
@@ -270,14 +423,12 @@ const GlyphProvider = {
     renderHints();
     if (state.overlay === "tutorial") renderTutorial();
   },
-  glyphHtml(
-    kind: "open" | "back",
-  ): string {
+  glyphHtml(kind: "open" | "back", label?: string): string {
     if (state.modality === "gamepad") {
       if (kind === "open") {
-        return `<kbd class="pad">A</kbd> <span class="hint-label">Open</span>`;
+        return `<kbd class="pad">A</kbd> <span class="hint-label">${label ?? "Open"}</span>`;
       }
-      return `<kbd class="pad">B</kbd> <span class="hint-label">Back / Salir a Windows</span>`;
+      return `<kbd class="pad">B</kbd> <span class="hint-label">${label ?? "Back / Salir a Windows"}</span>`;
     }
     if (kind === "open") {
       return (
@@ -285,12 +436,12 @@ const GlyphProvider = {
         `<span class="hint-label">Click</span>` +
         `<span class="hint-sep">/</span>` +
         `<img class="hint-icon" src="/assets/icons/input/enter.png" alt="" />` +
-        `<span class="hint-label">Enter = Open</span>`
+        `<span class="hint-label">${label ?? "Enter = Open"}</span>`
       );
     }
     return (
       `<img class="hint-icon" src="/assets/icons/input/esc.png" alt="" />` +
-      `<span class="hint-label">Esc = Back / Salir a Windows</span>`
+      `<span class="hint-label">${label ?? "Esc = Back / Salir a Windows"}</span>`
     );
   },
   openPhrase(): string {
@@ -303,9 +454,36 @@ const GlyphProvider = {
 
 function renderHints(): void {
   const el = $("hints");
-  el.innerHTML =
-    `<span class="hint">${GlyphProvider.glyphHtml("open")}</span>` +
-    `<span class="hint">${GlyphProvider.glyphHtml("back")}</span>`;
+  switch (state.overlay) {
+    case "settings":
+      el.innerHTML = `<span class="hint">${GlyphProvider.glyphHtml("back", "Esc = Cerrar ajustes")}</span>`;
+      return;
+    case "theme":
+      el.innerHTML = `<span class="hint">${GlyphProvider.glyphHtml("back", "Esc = Cerrar temas")}</span>`;
+      return;
+    case "tutorial":
+      el.innerHTML =
+        `<span class="hint">${GlyphProvider.glyphHtml("open", "Siguiente")}</span>` +
+        `<span class="hint">${GlyphProvider.glyphHtml("back", "Saltar")}</span>`;
+      return;
+    case "launching":
+      el.innerHTML = `<span class="hint">${GlyphProvider.glyphHtml("back", "Cancelar")}</span>`;
+      return;
+    case "confirm-exit":
+      el.innerHTML =
+        `<span class="hint">${GlyphProvider.glyphHtml("open", "Salir a Windows")}</span>` +
+        `<span class="hint">${GlyphProvider.glyphHtml("back", "Cancelar")}</span>`;
+      return;
+    case "path-cta":
+      el.innerHTML =
+        `<span class="hint">${GlyphProvider.glyphHtml("open", "Abrir Ajustes")}</span>` +
+        `<span class="hint">${GlyphProvider.glyphHtml("back", "Cerrar")}</span>`;
+      return;
+    default:
+      el.innerHTML =
+        `<span class="hint">${GlyphProvider.glyphHtml("open")}</span>` +
+        `<span class="hint">${GlyphProvider.glyphHtml("back")}</span>`;
+  }
 }
 
 /* ——— Theme / UI ——— */
@@ -328,6 +506,20 @@ function updateClock(): void {
   });
 }
 
+async function updateBattery(): Promise<void> {
+  try {
+    const nav = navigator as Navigator & {
+      getBattery?: () => Promise<{ level: number }>;
+    };
+    if (!nav.getBattery) return;
+    const b = await nav.getBattery();
+    $("battery").textContent = `${Math.round(b.level * 100)}%`;
+    $("battery").removeAttribute("title");
+  } catch {
+    /* keep placeholder */
+  }
+}
+
 function showOverlay(kind: OverlayKind): void {
   state.overlay = kind;
   $("tutorial").classList.toggle("hidden", kind !== "tutorial");
@@ -336,6 +528,7 @@ function showOverlay(kind: OverlayKind): void {
   $("launching").classList.toggle("hidden", kind !== "launching");
   $("confirm-exit").classList.toggle("hidden", kind !== "confirm-exit");
   $("path-cta").classList.toggle("hidden", kind !== "path-cta");
+  renderHints();
   syncFocusClass();
 }
 
@@ -356,9 +549,19 @@ function renderCarousel(): void {
   const list = games();
   const wrap = $("carousel-wrap");
   const empty = $("empty-state");
+  const loading = $("loading-state");
   const carousel = $("carousel");
   const dots = $("carousel-dots");
   const title = $("focus-title");
+
+  if (state.libraryStatus === "loading" && list.length === 0 && !state.config.emptyLibrary) {
+    wrap.classList.add("hidden");
+    empty.classList.add("hidden");
+    loading.classList.remove("hidden");
+    title.textContent = "";
+    return;
+  }
+  loading.classList.add("hidden");
 
   if (list.length === 0) {
     wrap.classList.add("hidden");
@@ -366,27 +569,42 @@ function renderCarousel(): void {
     title.textContent = "";
     state.focusZone = "dock";
 
-    const steamMissing = state.config.steamMissing;
-    $("empty-title").textContent = steamMissing
-      ? "Steam not found"
-      : "No games in collection";
-    $("empty-body").textContent = steamMissing
-      ? "Orbit could not find Steam. Relocate the install path or open Steam once, then Retry."
-      : "Your library is empty. Open Steam to browse or add games (including non-Steam shortcuts).";
+    const steamMissing =
+      state.config.steamMissing ||
+      state.libraryStatus === "missing" ||
+      state.libraryStatus === "error";
+    $("empty-title").textContent = state.config.emptyLibrary
+      ? "No games in collection"
+      : steamMissing
+        ? "Steam not found"
+        : "No games in collection";
+    $("empty-body").textContent = state.config.emptyLibrary
+      ? "Your library is empty. Open Steam to browse or add games (including non-Steam shortcuts)."
+      : steamMissing
+        ? inTauri()
+          ? "Orbit could not find Steam. Relocate the install path or open Steam once, then Retry."
+          : "Orbit reads your real Steam library in the Windows app. This browser preview cannot see installed games."
+        : "Steam is installed, but no games are installed yet. Open Steam to download games or add non-Steam shortcuts.";
     $("btn-relocate-steam").classList.toggle("hidden", !steamMissing);
+    $("btn-retry-steam").classList.remove("hidden");
+    updateLibraryChrome();
     return;
   }
 
   wrap.classList.remove("hidden");
   empty.classList.add("hidden");
   if (state.carouselIndex >= list.length) state.carouselIndex = 0;
+  if (state.carouselIndex < 0) state.carouselIndex = 0;
 
   carousel.replaceChildren();
   dots.replaceChildren();
 
-  const spacing = Math.min(160, Math.max(110, window.innerWidth * 0.12));
+  const spacing = Math.min(210, Math.max(140, window.innerWidth * 0.145));
+  const windowStart = Math.max(0, state.carouselIndex - 4);
+  const windowEnd = Math.min(list.length, state.carouselIndex + 5);
 
-  list.forEach((game, i) => {
+  for (let i = windowStart; i < windowEnd; i++) {
+    const game = list[i];
     const offset = i - state.carouselIndex;
     const abs = Math.abs(offset);
     const btn = document.createElement("button");
@@ -408,16 +626,21 @@ function renderCarousel(): void {
       String(abs > 3 ? 0 : Math.max(0.25, 1 - abs * 0.22)),
     );
     btn.style.zIndex = String(10 - abs);
-    btn.style.backgroundImage = `linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.55)), url("${game.poster}"), linear-gradient(135deg, ${game.color}, #111)`;
     btn.style.backgroundColor = game.color;
+
+    const img = document.createElement("img");
+    img.className = "poster-art";
+    img.alt = "";
+    img.draggable = false;
+    bindPosterFallbacks(img, game.posters);
 
     const label = document.createElement("span");
     label.className = "poster-label";
     label.textContent = game.name;
     const open = document.createElement("span");
     open.className = "poster-open";
-    open.textContent = "Open";
-    btn.append(label, open);
+    open.textContent = "Jugar";
+    btn.append(img, label, open);
 
     btn.addEventListener("click", () => {
       GlyphProvider.force("mouse-keyboard");
@@ -432,14 +655,29 @@ function renderCarousel(): void {
     });
 
     carousel.append(btn);
+  }
 
-    const dot = document.createElement("span");
-    if (i === state.carouselIndex) dot.classList.add("active");
-    dots.append(dot);
-  });
+  if (list.length <= 18) {
+    list.forEach((_, i) => {
+      const dot = document.createElement("span");
+      if (i === state.carouselIndex) dot.classList.add("active");
+      dots.append(dot);
+    });
+  } else {
+    const counter = document.createElement("span");
+    counter.className = "active";
+    counter.style.width = "auto";
+    counter.style.padding = "0 0.55rem";
+    counter.style.borderRadius = "999px";
+    counter.textContent = `${state.carouselIndex + 1} / ${list.length}`;
+    dots.append(counter);
+  }
 
   const focus = list[state.carouselIndex];
-  title.textContent = focus ? `${focus.name} · ${focus.genre}` : "";
+  title.textContent = focus
+    ? `${focus.name} · ${focus.genre} · ${state.carouselIndex + 1}/${list.length}`
+    : "";
+  updateLibraryChrome();
 }
 
 function syncFocusClass(): void {
@@ -466,7 +704,7 @@ function syncFocusClass(): void {
 function updatePathHealth(): void {
   const esdeBad = pathLooksMissing(state.config.esdePath);
   const sdBad = state.config.showSd && pathLooksMissing(state.config.sdPath);
-  const steamBad = state.config.steamMissing;
+  const steamBad = state.config.steamMissing || state.libraryStatus === "missing";
 
   document
     .querySelectorAll<HTMLElement>("[data-offline-for='emulators']")
@@ -494,9 +732,13 @@ function updatePathHealth(): void {
   }
 }
 
+function isOffline(): boolean {
+  return state.config.offline || navigator.onLine === false;
+}
+
 function applyConfigToUi(): void {
   applyTheme(state.config.theme);
-  $("offline-banner").classList.toggle("hidden", !state.config.offline);
+  $("offline-banner").classList.toggle("hidden", !isOffline());
   $("dock-sd").classList.toggle("hidden", !state.config.showSd);
 
   const empty = document.getElementById("settings-empty") as HTMLInputElement;
@@ -533,6 +775,8 @@ function applyConfigToUi(): void {
 }
 
 function readSettingsForm(): void {
+  const prevPath = state.config.steamPath;
+  const prevMissing = state.config.steamMissing;
   state.config.theme = (
     document.getElementById("settings-theme") as HTMLSelectElement
   ).value as ThemeId;
@@ -568,49 +812,54 @@ function readSettingsForm(): void {
   ).value.trim();
   saveConfig();
   applyConfigToUi();
+  if (state.config.steamPath !== prevPath || state.config.steamMissing !== prevMissing) {
+    void refreshLibrary();
+  }
+  void refreshPathHealth();
 }
 
 /* ——— Launch with debounce + Cancel (U-05) ——— */
 
-async function openExternal(target: string, label: string): Promise<void> {
+async function openExternal(target: string, label: string, hideShell = true): Promise<void> {
   if (state.launchLocked) return;
   state.launchLocked = true;
   showOverlay("launching");
-  $("launching-title").textContent = `Launching ${label}`;
+  $("launching-title").textContent = `Abriendo ${label}`;
   $("launching-sub").textContent = target.startsWith("http")
-    ? "Opening link…"
-    : "Handing off (mock on this box)…";
+    ? "Abriendo enlace…"
+    : target.startsWith("steam://")
+      ? "Enviando a Steam…"
+      : "Abriendo aplicación…";
 
   try {
-    const maybeTauri = (
-      window as unknown as {
-        __TAURI__?: {
-          core?: { invoke?: (cmd: string, args: unknown) => Promise<unknown> };
-        };
-      }
-    ).__TAURI__;
-    if (maybeTauri?.core?.invoke) {
-      try {
-        await maybeTauri.core.invoke("plugin:opener|open_url", { url: target });
-      } catch {
-        if (target.startsWith("http")) {
-          window.open(target, "_blank", "noopener,noreferrer");
-        }
-      }
+    if (inTauri()) {
+      await invoke("launch_target", {
+        target,
+        hideShell,
+        steamPath: state.config.steamPath || null,
+      });
     } else if (target.startsWith("http")) {
       window.open(target, "_blank", "noopener,noreferrer");
     }
-  } finally {
-    state.launchTimer = window.setTimeout(() => {
-      state.launchLocked = false;
-      state.launchTimer = 0;
-      if (state.overlay === "launching") showOverlay(null);
-    }, 1600);
+  } catch (err) {
+    state.launchLocked = false;
+    showOverlay(null);
+    showPathCta(
+      "No se pudo abrir",
+      `${label}: ${String(err)}. Revisa la ruta en Ajustes.`,
+    );
+    return;
   }
+
+  state.launchTimer = window.setTimeout(() => {
+    state.launchLocked = false;
+    state.launchTimer = 0;
+    if (state.overlay === "launching") showOverlay(null);
+  }, 1600);
 }
 
 async function launchGame(game: Game): Promise<void> {
-  if (state.config.steamMissing) {
+  if (state.config.steamMissing || state.libraryStatus === "missing") {
     showPathCta(
       "Steam not found",
       "Install Steam or set the Steam path in Settings, then try again.",
@@ -657,12 +906,7 @@ async function activateDock(id: string): Promise<void> {
         );
         return;
       }
-      await openExternal(
-        state.config.esdePath.startsWith("http")
-          ? state.config.esdePath
-          : `file:///${state.config.esdePath.replace(/\\/g, "/")}`,
-        "Emulators / ES-DE",
-      );
+      await openExternal(state.config.esdePath, "Emuladores / ES-DE");
       break;
     }
     case "stremio":
@@ -682,12 +926,7 @@ async function activateDock(id: string): Promise<void> {
         );
         return;
       }
-      await openExternal(
-        state.config.sdPath.startsWith("http")
-          ? state.config.sdPath
-          : `file:///${state.config.sdPath.replace(/\\/g, "/")}`,
-        "SD / ROMs",
-      );
+      await openExternal(state.config.sdPath, "SD / ROMs");
       break;
     }
   }
@@ -709,31 +948,20 @@ async function exitToDesktop(): Promise<void> {
   state.launchLocked = true;
   showOverlay("launching");
   $("launching-title").textContent = "Salir a Windows";
-  $("launching-sub").textContent = "Returning to desktop…";
+  $("launching-sub").textContent = "Volviendo al escritorio…";
   try {
-    const maybeTauri = (
-      window as unknown as {
-        __TAURI__?: {
-          core?: { invoke?: (cmd: string, args?: unknown) => Promise<unknown> };
-        };
-      }
-    ).__TAURI__;
-    if (maybeTauri?.core?.invoke) {
-      try {
-        await maybeTauri.core.invoke("plugin:opener|open_path", {
-          path: "shell:AppsFolder",
-        });
-      } catch {
-        // web preview can't exit
-      }
+    if (inTauri()) {
+      await invoke("exit_app");
+      return;
     }
-  } finally {
-    state.launchTimer = window.setTimeout(() => {
-      state.launchLocked = false;
-      state.launchTimer = 0;
-      if (state.overlay === "launching") showOverlay(null);
-    }, 900);
+  } catch {
+    /* web preview can't exit */
   }
+  state.launchTimer = window.setTimeout(() => {
+    state.launchLocked = false;
+    state.launchTimer = 0;
+    if (state.overlay === "launching") showOverlay(null);
+  }, 900);
 }
 
 function activateFocus(): void {
@@ -813,9 +1041,9 @@ function tutorialBodyHtml(step: number): string {
         `<p class="muted-note">On home, ${back} exits to Windows (Salir a Windows).</p>`
       );
     case 2:
-      return `<p>Dock <strong>Steam</strong> opens ${
+      return `<p>Orbit looks for Steam on this PC (common folders + <code>libraryfolders.vdf</code>). Dock <strong>Steam</strong> opens ${
         state.config.steamMode === "desktop" ? "Desktop Steam" : "Big Picture"
-      } by default. Carousel games launch directly with <code>steam://rungameid</code>.</p>`;
+      }. Carousel games launch with <code>steam://rungameid</code>. If Steam is missing you will see an empty screen — never a fake library.</p>`;
     case 3:
       return `<p>Point ES-DE, Stremio, Grok, and optional SD/ROMs in Settings. Export config anytime. Press ${open} to finish.</p>`;
     default:
@@ -882,6 +1110,8 @@ function importConfig(file: File): void {
       state.config = parsed;
       saveConfig();
       applyConfigToUi();
+      void refreshLibrary();
+      void refreshPathHealth();
       status.textContent = "Import OK — config applied.";
       status.dataset.tone = "ok";
     } catch {
@@ -961,6 +1191,9 @@ function bindUi(): void {
     closeOverlay();
     startTutorial();
   });
+  $("btn-rescan-steam").addEventListener("click", () => {
+    void refreshLibrary();
+  });
 
   $("tutorial-skip").addEventListener("click", () => finishTutorial());
   $("tutorial-next").addEventListener("click", () => advanceTutorial());
@@ -980,6 +1213,7 @@ function bindUi(): void {
     state.config.offline = false;
     saveConfig();
     applyConfigToUi();
+    void refreshLibrary();
   });
   $("btn-use-cache").addEventListener("click", () => {
     state.config.offline = false;
@@ -987,15 +1221,23 @@ function bindUi(): void {
     state.config.steamMissing = false;
     saveConfig();
     applyConfigToUi();
+    void refreshLibrary();
   });
   $("btn-open-steam-empty").addEventListener("click", () => {
-    void activateDock("steam");
+    void openExternal(
+      state.config.steamMode === "desktop"
+        ? "steam://open/main"
+        : "steam://open/bigpicture",
+      "Steam",
+    );
   });
   $("btn-relocate-steam").addEventListener("click", () => {
     showOverlay("settings");
   });
+  $("btn-retry-steam").addEventListener("click", () => {
+    void refreshLibrary();
+  });
 
-  // Hot-swap input modality (U-03)
   window.addEventListener("pointerdown", () => {
     GlyphProvider.set("mouse-keyboard");
   });
@@ -1010,6 +1252,13 @@ function bindUi(): void {
   window.addEventListener("resize", () => {
     renderCarousel();
     syncFocusClass();
+  });
+  window.addEventListener("online", () => applyConfigToUi());
+  window.addEventListener("offline", () => applyConfigToUi());
+  window.addEventListener("focus", () => {
+    if (state.libraryStatus === "missing" || state.libraryGames.length === 0) {
+      void refreshLibrary();
+    }
   });
 
   window.addEventListener("gamepadconnected", () => {
@@ -1108,14 +1357,13 @@ function pollGamepad(): void {
   }
 
   if (state.launchLocked) {
-    if (pressed(1)) cancelLaunch(); // B cancels launching
+    if (pressed(1)) cancelLaunch();
     prevButtons = buttons;
     return;
   }
 
-  if (pressed(0)) activateFocus(); // A
+  if (pressed(0)) activateFocus();
   if (pressed(1)) {
-    // B
     if (state.overlay === "tutorial") finishTutorial();
     else if (state.overlay === "confirm-exit" || state.overlay === "path-cta") {
       showOverlay(null);
@@ -1157,6 +1405,7 @@ function boot(): void {
   GlyphProvider.force("mouse-keyboard");
   applyConfigToUi();
   updateClock();
+  void updateBattery();
   window.setInterval(updateClock, 15_000);
   bindUi();
 
@@ -1173,6 +1422,9 @@ function boot(): void {
     syncFocusClass();
     void activateDock(btn.dataset.dock);
   });
+
+  void refreshLibrary();
+  void refreshPathHealth();
 
   if (!localStorage.getItem(STORAGE_TUTORIAL)) {
     startTutorial();
