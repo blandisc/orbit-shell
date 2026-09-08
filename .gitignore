@@ -1,2 +1,7 @@
-node_modules/\ndist/\nsrc-tauri/target/\n*.log\n.DS_Store\n
+node_modules/
+dist/
+src-tauri/target/
+*.log
+.DS_Store
 grok-build.log
+.venv/

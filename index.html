@@ -1,43 +1,191 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="b2" data-input="keyboard">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
+    <title>Orbit Shell</title>
+    <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.ts" defer></script>
   </head>
-
   <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
+    <div id="app" class="shell">
+      <div class="shell-frame" aria-hidden="true"></div>
 
-      <div class="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/src/assets/vite.svg" class="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img
-            src="/src/assets/tauri.svg"
-            class="logo tauri"
-            alt="Tauri logo"
-          />
-        </a>
-        <a href="https://www.typescriptlang.org/docs" target="_blank">
-          <img
-            src="/src/assets/typescript.svg"
-            class="logo typescript"
-            alt="typescript logo"
-          />
-        </a>
+      <header class="status-bar" role="banner">
+        <div class="status-left">
+          <span class="status-brand">Orbit</span>
+          <span class="status-collection" id="collection-label">Steam</span>
+        </div>
+        <div class="status-center">
+          <span class="status-source-label">Collection</span>
+          <span class="status-source" id="source-name">Steam</span>
+        </div>
+        <div class="status-right">
+          <button type="button" class="chip-btn" id="btn-theme" title="Theme" data-focus="theme">Theme</button>
+          <button type="button" class="chip-btn" id="btn-settings" title="Settings" data-focus="settings">Settings</button>
+          <span class="status-time" id="clock">--:--</span>
+          <span class="status-battery" id="battery" title="Battery placeholder">100%</span>
+        </div>
+      </header>
+
+      <div class="offline-banner hidden" id="offline-banner" role="status">
+        <span class="offline-dot"></span>
+        <span>Offline — Steam features limited.</span>
+        <button type="button" class="text-btn" id="btn-retry-online">Retry</button>
+        <button type="button" class="text-btn" id="btn-use-cache">Use cache</button>
       </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
+      <main class="stage" id="stage">
+        <section class="carousel-wrap" id="carousel-wrap" aria-label="Game library">
+          <div class="carousel" id="carousel" tabindex="0"></div>
+          <div class="carousel-dots" id="carousel-dots" aria-hidden="true"></div>
+          <p class="focus-title" id="focus-title"></p>
+        </section>
+
+        <section class="empty-state hidden" id="empty-state" aria-label="Empty library">
+          <div class="empty-card">
+            <div class="empty-icon" aria-hidden="true">◇</div>
+            <h2>No games in collection</h2>
+            <p>Your library is empty. Open Steam to browse or add games.</p>
+            <button type="button" class="primary-btn" id="btn-open-steam-empty" data-focus="empty-steam">
+              Open Steam
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <nav class="dock" id="dock" aria-label="Quick launch">
+        <button type="button" class="dock-item" data-dock="steam" data-focus="dock-steam">
+          <span class="dock-icon" data-icon="steam"></span>
+          <span class="dock-label">Steam</span>
+        </button>
+        <button type="button" class="dock-item" data-dock="emulators" data-focus="dock-emulators">
+          <span class="dock-icon" data-icon="emulators"></span>
+          <span class="dock-label">Emulators</span>
+        </button>
+        <button type="button" class="dock-item" data-dock="stremio" data-focus="dock-stremio">
+          <span class="dock-icon" data-icon="stremio"></span>
+          <span class="dock-label">Stremio</span>
+        </button>
+        <button type="button" class="dock-item" data-dock="grok" data-focus="dock-grok">
+          <span class="dock-icon" data-icon="grok"></span>
+          <span class="dock-label">Grok</span>
+        </button>
+        <button type="button" class="dock-item" data-dock="desktop" data-focus="dock-desktop">
+          <span class="dock-icon" data-icon="desktop"></span>
+          <span class="dock-label">Desktop</span>
+        </button>
+        <button type="button" class="dock-item optional" data-dock="sd" data-focus="dock-sd" id="dock-sd">
+          <span class="dock-icon dock-icon-sd" data-icon="sd"></span>
+          <span class="dock-label">SD</span>
+        </button>
+      </nav>
+
+      <footer class="hints" id="hints" aria-live="polite">
+        <span class="hint" data-for="keyboard"><kbd>Click</kbd> / <kbd>Enter</kbd> Open</span>
+        <span class="hint" data-for="keyboard"><kbd>Esc</kbd> Back / Desktop</span>
+        <span class="hint" data-for="gamepad"><kbd class="pad">A</kbd> Open</span>
+        <span class="hint" data-for="gamepad"><kbd class="pad">B</kbd> Back / Desktop</span>
+      </footer>
+    </div>
+
+    <!-- First-run tutorial -->
+    <div class="overlay hidden" id="tutorial" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+      <div class="overlay-card tutorial-card">
+        <p class="overlay-kicker">First run · <span id="tutorial-step-n">1</span>/4</p>
+        <h2 id="tutorial-title">Welcome</h2>
+        <p id="tutorial-body"></p>
+        <div class="overlay-actions">
+          <button type="button" class="text-btn" id="tutorial-skip">Skip</button>
+          <button type="button" class="primary-btn" id="tutorial-next">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="overlay hidden" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="overlay-card settings-card">
+        <h2 id="settings-title">Settings</h2>
+        <div class="settings-grid">
+          <label class="field">
+            <span>Theme</span>
+            <select id="settings-theme">
+              <option value="b2">B2 Green CRT</option>
+              <option value="a-prime">A-Prime Ultra</option>
+              <option value="c-nordic">C Nordic</option>
+            </select>
+          </label>
+          <label class="field check">
+            <input type="checkbox" id="settings-empty" />
+            <span>Show empty library (demo)</span>
+          </label>
+          <label class="field check">
+            <input type="checkbox" id="settings-offline" />
+            <span>Simulate offline</span>
+          </label>
+          <label class="field check">
+            <input type="checkbox" id="settings-sd" checked />
+            <span>Show SD / ROMs dock item</span>
+          </label>
+          <label class="field">
+            <span>Grok URL</span>
+            <input type="url" id="settings-grok" placeholder="https://grok.com" />
+          </label>
+          <label class="field">
+            <span>ES-DE / Emulators path</span>
+            <input type="text" id="settings-esde" placeholder="C:\\ES-DE\\ES-DE.exe" />
+          </label>
+          <label class="field">
+            <span>Stremio path</span>
+            <input type="text" id="settings-stremio" placeholder="stremio://" />
+          </label>
+          <label class="field">
+            <span>SD / ROMs folder</span>
+            <input type="text" id="settings-sd-path" placeholder="D:\\ROMs" />
+          </label>
+        </div>
+        <div class="overlay-actions">
+          <button type="button" class="text-btn" id="btn-export">Export JSON</button>
+          <button type="button" class="text-btn" id="btn-import">Import JSON</button>
+          <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
+          <button type="button" class="primary-btn" id="settings-close">Close</button>
+        </div>
+        <p class="settings-hint">B / Esc closes · Config is shareable and portable.</p>
+      </div>
+    </div>
+
+    <!-- Theme picker quick overlay -->
+    <div class="overlay hidden" id="theme-picker" role="dialog" aria-modal="true" aria-labelledby="theme-picker-title">
+      <div class="overlay-card theme-card">
+        <h2 id="theme-picker-title">Themes</h2>
+        <div class="theme-options">
+          <button type="button" class="theme-option" data-theme-pick="b2">
+            <img src="/assets/themes/b2-green.png" alt="" />
+            <span>B2 Green</span>
+          </button>
+          <button type="button" class="theme-option" data-theme-pick="a-prime">
+            <img src="/assets/themes/a-prime-ultra.png" alt="" />
+            <span>A-Prime</span>
+          </button>
+          <button type="button" class="theme-option" data-theme-pick="c-nordic">
+            <img src="/assets/themes/c-nordic.png" alt="" />
+            <span>C Nordic</span>
+          </button>
+        </div>
+        <div class="overlay-actions">
+          <button type="button" class="primary-btn" id="theme-picker-close">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Launching overlay -->
+    <div class="overlay hidden" id="launching" role="status" aria-live="assertive">
+      <div class="overlay-card launching-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <h2 id="launching-title">Launching…</h2>
+        <p id="launching-sub">Please wait</p>
+      </div>
+    </div>
   </body>
 </html>
