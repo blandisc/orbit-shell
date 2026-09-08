@@ -1,20 +1,19 @@
 # Orbit Shell
 
-Lightweight Steam console shell (Tauri 2 + Vite + TS).
+Lightweight Steam console shell (Tauri 2 + Vite + TS) with adaptive input glyphs.
 
 ## Run
 
-npm install
-npm run dev
-
+Install packages, then start the Vite development server (script: dev).
 Open http://localhost:1420
 
 ## Build
 
-npm run build
+Run the production build script (tsc + vite).
 
 ## Controls
 
-Arrows move focus. Enter/Click/A opens. Esc/B back or Desktop on home.
-
-Themes: b2, a-prime, c-nordic. First-run tutorial + config JSON export/import. Mock Steam library OK.
+- Gamepad: A = Open, B = Back / Salir a Windows
+- Mouse/keyboard: Click or Enter = Open, Esc = Back / Salir a Windows
+- Themes: b2, a-prime, c-nordic. Stremio stays on the dock.
+- See USABILITY_RESEARCH.md backlog U-01..U-08.

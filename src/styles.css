@@ -64,7 +64,8 @@ kbd.pad {
   --accent: #39ff14;
   --accent-dim: rgba(57, 255, 20, 0.35);
   --accent-ink: #041006;
-  --focus-glow: 0 0 0 2px var(--accent), 0 0 24px rgba(57, 255, 20, 0.45);
+  --focus-glow: 0 0 0 4px var(--accent), 0 0 0 8px rgba(57, 255, 20, 0.25), 0 0 28px rgba(57, 255, 20, 0.45);
+  --focus-scale: 1.06;
   --dock-radius: 14px;
   --poster-radius: 10px;
   --frame: 1px solid var(--accent-dim);
@@ -83,7 +84,8 @@ kbd.pad {
   --accent: #4de8ff;
   --accent-dim: rgba(77, 232, 255, 0.35);
   --accent-ink: #021018;
-  --focus-glow: 0 0 0 2px var(--accent), 0 0 28px rgba(77, 232, 255, 0.4);
+  --focus-glow: 0 0 0 4px var(--accent), 0 0 0 8px rgba(77, 232, 255, 0.22), 0 0 28px rgba(77, 232, 255, 0.4);
+  --focus-scale: 1.06;
   --dock-radius: 18px;
   --poster-radius: 14px;
   --frame: 1px solid transparent;
@@ -102,7 +104,8 @@ kbd.pad {
   --accent: #7fb2f0;
   --accent-dim: rgba(127, 178, 240, 0.4);
   --accent-ink: #0b1220;
-  --focus-glow: 0 0 0 2px var(--accent), 0 0 22px rgba(127, 178, 240, 0.35);
+  --focus-glow: 0 0 0 4px var(--accent), 0 0 0 8px rgba(127, 178, 240, 0.22), 0 0 22px rgba(127, 178, 240, 0.35);
+  --focus-scale: 1.06;
   --dock-radius: 22px;
   --poster-radius: 18px;
   --frame: none;
@@ -252,6 +255,7 @@ kbd.pad {
   outline: none;
   box-shadow: var(--focus-glow);
   border-color: var(--accent);
+  transform: scale(var(--focus-scale, 1.06));
 }
 
 .primary-btn {
@@ -338,12 +342,21 @@ kbd.pad {
   --ry: 0deg;
   --tx: 0px;
   border-color: var(--accent);
+  border-width: 4px;
   box-shadow: var(--focus-glow), 0 22px 48px rgba(0, 0, 0, 0.55);
   z-index: 5;
 }
 
+.poster.is-focus.is-focused,
 .poster.is-focused {
   outline: none;
+  /* U-08: shape + thickness + scale — not color-only */
+  transform: translate(-50%, -50%) translateX(var(--tx, 0)) rotateY(var(--ry, 0deg))
+    scale(calc(var(--sc, 1) * var(--focus-scale, 1.06)));
+  border-width: 4px;
+  border-style: solid;
+  border-color: var(--accent);
+  box-shadow: var(--focus-glow), 0 22px 48px rgba(0, 0, 0, 0.55);
 }
 
 .poster-label {
@@ -463,7 +476,7 @@ kbd.pad {
   border-radius: var(--dock-radius);
   background: transparent;
   cursor: pointer;
-  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s, transform 0.15s;
 }
 
 .dock-item:hover,
@@ -471,8 +484,14 @@ kbd.pad {
 .dock-item.is-focused {
   outline: none;
   border-color: var(--accent);
+  border-width: 3px;
   background: var(--surface-2);
   box-shadow: var(--focus-glow);
+  transform: scale(var(--focus-scale, 1.06));
+}
+
+.dock-item.is-offline {
+  opacity: 0.55;
 }
 
 .dock-icon {
@@ -567,21 +586,127 @@ kbd.pad {
 .hints {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 1rem;
   padding: 0.35rem 0.25rem 0.15rem;
   font-size: 0.8rem;
   color: var(--muted);
 }
 
-[data-input="keyboard"] .hint[data-for="gamepad"],
-[data-input="gamepad"] .hint[data-for="keyboard"] {
-  display: none;
-}
-
 .hint {
   display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
+}
+
+.hint-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.6));
+}
+
+.hint-label {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.hint-sep {
+  opacity: 0.5;
+  margin: 0 0.1rem;
+}
+
+.tutorial-glyphs {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem;
+  margin: 0.55rem 0 !important;
+  color: var(--text) !important;
+}
+
+.tutorial-body code {
+  font-size: 0.85em;
+  color: var(--accent);
+}
+
+.muted-note {
+  font-size: 0.85rem;
+}
+
+.path-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(255, 180, 60, 0.15);
+  border: 1px solid rgba(255, 180, 60, 0.4);
+  font-size: 0.85rem;
+  position: relative;
+  z-index: 1;
+}
+
+.dock-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 180, 60, 0.95);
+  color: #1a1200;
+}
+
+.dock-item {
+  position: relative;
+}
+
+.dock-sub {
+  font-size: 0.55rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  margin-top: -0.15rem;
+}
+
+.dock-item[data-dock="desktop"] .dock-label {
+  font-size: 0.62rem;
+  max-width: 92px;
+  line-height: 1.15;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.settings-status {
+  min-height: 1.2em;
+  margin: 0.25rem 0 0.5rem !important;
+  font-size: 0.8rem;
+}
+
+.settings-status[data-tone="ok"] {
+  color: var(--accent);
+}
+
+.settings-status[data-tone="err"] {
+  color: #ff8e8e;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.confirm-card {
+  width: min(420px, 94vw);
 }
 
 /* ——— Overlays ——— */

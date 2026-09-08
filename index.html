@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="b2" data-input="keyboard">
+<html lang="es" data-theme="b2" data-input="mouse-keyboard">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
@@ -30,10 +30,15 @@
       </header>
 
       <div class="offline-banner hidden" id="offline-banner" role="status">
-        <span class="offline-dot"></span>
+        <span class="offline-dot" aria-hidden="true"></span>
         <span>Offline — Steam features limited.</span>
         <button type="button" class="text-btn" id="btn-retry-online">Retry</button>
         <button type="button" class="text-btn" id="btn-use-cache">Use cache</button>
+      </div>
+
+      <div class="path-banner hidden" id="path-banner" role="status">
+        <span id="path-banner-text">Some shortcuts need paths.</span>
+        <button type="button" class="text-btn" id="btn-fix-paths">Fix in Settings</button>
       </div>
 
       <main class="stage" id="stage">
@@ -46,11 +51,16 @@
         <section class="empty-state hidden" id="empty-state" aria-label="Empty library">
           <div class="empty-card">
             <div class="empty-icon" aria-hidden="true">◇</div>
-            <h2>No games in collection</h2>
-            <p>Your library is empty. Open Steam to browse or add games.</p>
-            <button type="button" class="primary-btn" id="btn-open-steam-empty" data-focus="empty-steam">
-              Open Steam
-            </button>
+            <h2 id="empty-title">No games in collection</h2>
+            <p id="empty-body">Your library is empty. Open Steam to browse or add games.</p>
+            <div class="empty-actions">
+              <button type="button" class="primary-btn" id="btn-open-steam-empty" data-focus="empty-steam">
+                Open Steam
+              </button>
+              <button type="button" class="text-btn hidden" id="btn-relocate-steam">
+                Relocate Steam
+              </button>
+            </div>
           </div>
         </section>
       </main>
@@ -63,6 +73,7 @@
         <button type="button" class="dock-item" data-dock="emulators" data-focus="dock-emulators">
           <span class="dock-icon" data-icon="emulators"></span>
           <span class="dock-label">Emulators</span>
+          <span class="dock-badge hidden" data-offline-for="emulators">Offline</span>
         </button>
         <button type="button" class="dock-item" data-dock="stremio" data-focus="dock-stremio">
           <span class="dock-icon" data-icon="stremio"></span>
@@ -72,21 +83,20 @@
           <span class="dock-icon" data-icon="grok"></span>
           <span class="dock-label">Grok</span>
         </button>
-        <button type="button" class="dock-item" data-dock="desktop" data-focus="dock-desktop">
+        <button type="button" class="dock-item" data-dock="desktop" data-focus="dock-desktop" id="dock-desktop">
           <span class="dock-icon" data-icon="desktop"></span>
-          <span class="dock-label">Desktop</span>
+          <span class="dock-label">Salir a Windows</span>
+          <span class="dock-sub">Desktop</span>
         </button>
         <button type="button" class="dock-item optional" data-dock="sd" data-focus="dock-sd" id="dock-sd">
           <span class="dock-icon dock-icon-sd" data-icon="sd"></span>
           <span class="dock-label">SD</span>
+          <span class="dock-badge hidden" data-offline-for="sd">Missing</span>
         </button>
       </nav>
 
       <footer class="hints" id="hints" aria-live="polite">
-        <span class="hint" data-for="keyboard"><kbd>Click</kbd> / <kbd>Enter</kbd> Open</span>
-        <span class="hint" data-for="keyboard"><kbd>Esc</kbd> Back / Desktop</span>
-        <span class="hint" data-for="gamepad"><kbd class="pad">A</kbd> Open</span>
-        <span class="hint" data-for="gamepad"><kbd class="pad">B</kbd> Back / Desktop</span>
+        <!-- Filled by InputGlyphProvider -->
       </footer>
     </div>
 
@@ -95,10 +105,34 @@
       <div class="overlay-card tutorial-card">
         <p class="overlay-kicker">First run · <span id="tutorial-step-n">1</span>/4</p>
         <h2 id="tutorial-title">Welcome</h2>
-        <p id="tutorial-body"></p>
+        <div id="tutorial-body" class="tutorial-body"></div>
         <div class="overlay-actions">
           <button type="button" class="text-btn" id="tutorial-skip">Skip</button>
           <button type="button" class="primary-btn" id="tutorial-next">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm exit to Windows -->
+    <div class="overlay hidden" id="confirm-exit" role="dialog" aria-modal="true" aria-labelledby="confirm-exit-title">
+      <div class="overlay-card confirm-card">
+        <h2 id="confirm-exit-title">Salir a Windows?</h2>
+        <p>This leaves Orbit Shell and returns to the Windows desktop. You can reopen Orbit anytime.</p>
+        <div class="overlay-actions">
+          <button type="button" class="text-btn" id="confirm-exit-cancel">Cancel</button>
+          <button type="button" class="primary-btn" id="confirm-exit-ok">Salir a Windows</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Path / offline CTA dialog -->
+    <div class="overlay hidden" id="path-cta" role="dialog" aria-modal="true" aria-labelledby="path-cta-title">
+      <div class="overlay-card confirm-card">
+        <h2 id="path-cta-title">Shortcut unavailable</h2>
+        <p id="path-cta-body">This path is missing or empty.</p>
+        <div class="overlay-actions">
+          <button type="button" class="text-btn" id="path-cta-close">Close</button>
+          <button type="button" class="primary-btn" id="path-cta-settings">Open Settings</button>
         </div>
       </div>
     </div>
@@ -116,6 +150,13 @@
               <option value="c-nordic">C Nordic</option>
             </select>
           </label>
+          <label class="field">
+            <span>Steam dock opens</span>
+            <select id="settings-steam-mode">
+              <option value="bigpicture">Big Picture (default)</option>
+              <option value="desktop">Desktop Steam</option>
+            </select>
+          </label>
           <label class="field check">
             <input type="checkbox" id="settings-empty" />
             <span>Show empty library (demo)</span>
@@ -123,6 +164,10 @@
           <label class="field check">
             <input type="checkbox" id="settings-offline" />
             <span>Simulate offline</span>
+          </label>
+          <label class="field check">
+            <input type="checkbox" id="settings-steam-missing" />
+            <span>Simulate Steam missing</span>
           </label>
           <label class="field check">
             <input type="checkbox" id="settings-sd" checked />
@@ -134,7 +179,7 @@
           </label>
           <label class="field">
             <span>ES-DE / Emulators path</span>
-            <input type="text" id="settings-esde" placeholder="C:\\ES-DE\\ES-DE.exe" />
+            <input type="text" id="settings-esde" placeholder="C:\ES-DE\ES-DE.exe" />
           </label>
           <label class="field">
             <span>Stremio path</span>
@@ -142,16 +187,22 @@
           </label>
           <label class="field">
             <span>SD / ROMs folder</span>
-            <input type="text" id="settings-sd-path" placeholder="D:\\ROMs" />
+            <input type="text" id="settings-sd-path" placeholder="D:\ROMs" />
+          </label>
+          <label class="field">
+            <span>Steam install path (optional)</span>
+            <input type="text" id="settings-steam-path" placeholder="C:\Program Files (x86)\Steam" />
           </label>
         </div>
+        <p class="settings-status" id="settings-import-status" role="status"></p>
         <div class="overlay-actions">
           <button type="button" class="text-btn" id="btn-export">Export JSON</button>
           <button type="button" class="text-btn" id="btn-import">Import JSON</button>
+          <button type="button" class="text-btn" id="btn-replay-tutorial">Show tutorial</button>
           <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
           <button type="button" class="primary-btn" id="settings-close">Close</button>
         </div>
-        <p class="settings-hint">B / Esc closes · Config is shareable and portable.</p>
+        <p class="settings-hint">Config is shareable. Bad imports roll back automatically.</p>
       </div>
     </div>
 
@@ -179,12 +230,15 @@
       </div>
     </div>
 
-    <!-- Launching overlay -->
+    <!-- Launching overlay with Cancel (U-05) -->
     <div class="overlay hidden" id="launching" role="status" aria-live="assertive">
       <div class="overlay-card launching-card">
         <div class="spinner" aria-hidden="true"></div>
         <h2 id="launching-title">Launching…</h2>
         <p id="launching-sub">Please wait</p>
+        <div class="overlay-actions" style="justify-content: center">
+          <button type="button" class="text-btn" id="launching-cancel">Cancel</button>
+        </div>
       </div>
     </div>
   </body>
