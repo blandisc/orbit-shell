@@ -30,3 +30,9 @@ Copy useful assets from ../legion-shell into this repo's public/assets.
 - Dock **Steam** shortcut launches **Steam Big Picture** (`steam://open/bigpicture` or equivalent).
 - Carousel game launch uses `steam://rungameid/<id>` directly — do not open desktop Steam first.
 - Desktop dock button exits Orbit Shell to Windows desktop.
+
+
+## Navigation (product)
+- Home: D-pad/stick moves focus; A opens; B/Esc = Desktop if on home, else close overlay.
+- Opening Steam BP / ES-DE / Stremio / a game minimizes Orbit; return to Orbit home when that app exits.
+- Max one overlay depth (Settings/themes). Stremio is a first-class dock icon in all themes.
