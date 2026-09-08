@@ -1,0 +1,96 @@
+{
+  "findings": [
+    {
+      "id": "NEW-13",
+      "persona": "P15",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Cancel during Launching",
+      "expected": "Overlay dismisses",
+      "actual": "Cancel works",
+      "fixHint": "U-05"
+    },
+    {
+      "id": "U-04",
+      "persona": "P10",
+      "sev": "S1",
+      "status": "PASS",
+      "repro": "First Desktop dock click",
+      "expected": "Confirm + Salir a Windows label",
+      "actual": "label=Salir a Windows; dialog=Salir a Windows?",
+      "fixHint": "Copy + first confirm"
+    },
+    {
+      "id": "NEW-14",
+      "persona": "P06",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Esc on home first time",
+      "expected": "Confirm dialog",
+      "actual": "Esc triggers confirm-exit",
+      "fixHint": "U-04"
+    },
+    {
+      "id": "NEW-15",
+      "persona": "P10",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Confirm OK",
+      "expected": "Flag set",
+      "actual": "desktopOk=1",
+      "fixHint": null
+    },
+    {
+      "id": "NEW-16",
+      "persona": "P10",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Desktop after prior confirm",
+      "expected": "No second confirm",
+      "actual": "confirmHidden=true launchingHidden=false",
+      "fixHint": "U-04 once"
+    },
+    {
+      "id": "NEW-17",
+      "persona": "P04",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Inspect dock",
+      "expected": "Stremio present",
+      "actual": "dock=Steam, Emulators, Stremio, Grok, Salir a Windows, SD",
+      "fixHint": null
+    },
+    {
+      "id": "NEW-18",
+      "persona": "P18",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Dock inventory",
+      "expected": "All items",
+      "actual": "All present",
+      "fixHint": "U-12"
+    },
+    {
+      "id": "U-16",
+      "persona": "P05",
+      "sev": "S3",
+      "status": "PASS",
+      "repro": "Dock hit targets",
+      "expected": ">=48px",
+      "actual": "Steam:72x210; Emulators:89x210; Stremio:75x210; Grok:72x210; Salir a Windows:115x210; SD:72x210",
+      "fixHint": "48px min"
+    },
+    {
+      "id": "U-06-residual",
+      "persona": "P11",
+      "sev": "S3",
+      "status": "FAIL",
+      "repro": "Skip tutorial; inspect footer",
+      "expected": "Optional first-N-session cheat sheet beyond glyphs",
+      "actual": "Only persistent glyphs; no skip-recovery tips line",
+      "fixHint": "Footer cheat-sheet; Ver tutorial exists in Settings (PASS)"
+    }
+  ],
+  "pass": 8,
+  "fail": 1
+}
